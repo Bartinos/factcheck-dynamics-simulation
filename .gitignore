@@ -7,6 +7,9 @@ __pycache__/
 *.so
 
 # Distribution / packaging
+# NOTE: `lib/`, `lib64/` and `var/` are setuptools staging-dir names, but they are
+# also plausible source dirs in a simulation project, so they are deliberately not
+# ignored here. Re-enable if you start building distributions by hand.
 .Python
 build/
 develop-eggs/
@@ -14,11 +17,11 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
-lib64/
+# lib/
+# lib64/
 parts/
 sdist/
-var/
+# var/
 wheels/
 share/python-wheels/
 *.egg-info/
@@ -221,3 +224,24 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+### Project-specific: Mesa 4 + SolaraViz ###
+
+# Solara server state/cache, created in cwd by `mesa run` / solara run
+.solara/
+
+# Simulation run output (mesa DataCollector exports, batdata stores, matplotlib figures)
+runs/
+outputs/
+*.parquet
+*.sqlite
+*.sqlite3
+*.npz
+*.npy
+*.pkl
+
+# OS / editor cruft not covered by the Python template
+.DS_Store
+Thumbs.db
+# .vscode/
+# .idea/
