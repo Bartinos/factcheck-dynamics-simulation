@@ -368,7 +368,7 @@ wheels = [
 [[package]]
 name = "factcheck-dynamics-simulation"
 version = "0.1.0"
-source = { editable = "." }
+source = { virtual = "." }
 dependencies = [
     { name = "matplotlib" },
     { name = "mesa", extra = ["network", "viz"] },
