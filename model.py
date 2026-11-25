@@ -10,18 +10,35 @@ class NetworkAgent(mesa.Agent):
 
 class NetworkModel(mesa.Model):
     def __init__(
-        self, graph=None, *, initial_believers=(), p0=0.02, peer_influence=0.20, rng=None
+        self,
+        graph=None,
+        *,
+        initial_believers=(),
+        p0=0.02,
+        peer_influence=0.20,
+        fact_check_step=None,
+        correction_probability=0.70,
+        rng=None,
     ):
         super().__init__(rng=rng)
         self.graph = nx.Graph() if graph is None else graph.copy()
         self.p0 = p0
         self.peer_influence = peer_influence
+        self.fact_check_step = fact_check_step
+        self.correction_probability = correction_probability
 
         initial_believers = set(initial_believers)
         self.agents_by_node = {
             node: NetworkAgent(self, believes=node in initial_believers)
             for node in self.graph
         }
+        self.prevalence_history = [self.prevalence()]
+
+    def prevalence(self):
+        agents = self.agents_by_node.values()
+        if not agents:
+            return None
+        return sum(agent.believes for agent in agents) / len(agents)
 
     def believing_neighbor_fraction(self, node):
         neighbors = list(self.graph.neighbors(node))
@@ -37,11 +54,23 @@ class NetworkModel(mesa.Model):
         return min(1.0, self.p0 + self.peer_influence * neighbor_fraction)
 
     def step(self):
-        # Decide who adopts using the current beliefs before changing any of them.
+        # Decide both updates from the starting beliefs before applying any changes.
         adopters = [
             agent
             for node, agent in self.agents_by_node.items()
             if not agent.believes and self.random.random() < self.adoption_probability(node)
         ]
+        corrected = []
+        if self.time == self.fact_check_step:
+            corrected = [
+                agent
+                for agent in self.agents_by_node.values()
+                if agent.believes and self.random.random() < self.correction_probability
+            ]
+
         for agent in adopters:
             agent.believes = True
+        for agent in corrected:
+            agent.believes = False
+
+        self.prevalence_history.append(self.prevalence())
