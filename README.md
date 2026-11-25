@@ -1,12 +1,16 @@
 # Network simulation
 
-Start the interactive dashboard with:
+## Run the interactive visualization
 
 ```bash
-uv run solara run app.py
+uv run solara run server.py
 ```
 
-Open the local address printed in the terminal. Blue nodes are susceptible and
-red nodes are infected. Use Play, Pause, Step and Reset to control the model.
-Pause before changing parameters, then press Reset to start a new run. Stop the
-server with Ctrl+C in the terminal.
+Open the local address printed in the terminal. Click **Step** to see which
+agents believe the claim and how prevalence changes, one step at a time. Red
+nodes believe the claim and blue nodes reject it. Use play and pause to watch
+the run continuously.
+
+Choose the fact-check step and peer influence in the sidebar, then click
+**Reset** to apply the settings. Reset reuses the same network, initial beliefs,
+and random seed so you can compare settings on the same starting state.
