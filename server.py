@@ -3,6 +3,7 @@ from random import Random
 import networkx as nx
 import solara
 from matplotlib.figure import Figure
+from matplotlib.lines import Line2D
 from mesa.visualization import SolaraViz
 from mesa.visualization.utils import update_counter
 
@@ -19,40 +20,63 @@ GRAPH = nx.fast_gnp_random_graph(
     AGENT_COUNT, TARGET_AVERAGE_DEGREE / (AGENT_COUNT - 1), seed=SEED
 )
 INITIAL_BELIEVERS = tuple(Random(SEED).sample(list(GRAPH), AGENT_COUNT // 10))
-POSITIONS = nx.spring_layout(GRAPH, seed=SEED)
+ISOLATED_NODES = tuple(nx.isolates(GRAPH))
+CONNECTED_NODES = [node for node, degree in GRAPH.degree if degree > 0]
+POSITIONS = nx.kamada_kawai_layout(GRAPH.subgraph(CONNECTED_NODES))
+POSITIONS.update(
+    {
+        node: ((index - (len(ISOLATED_NODES) - 1) / 2) * 0.12, -1.15)
+        for index, node in enumerate(ISOLATED_NODES)
+    }
+)
+REJECTS_COLOR = "#2563a8"
+BELIEVES_COLOR = "#c43c3c"
+BELIEF_LEGEND = [
+    Line2D([], [], color=REJECTS_COLOR, marker="o", linestyle="none", label="Rejects the claim"),
+    Line2D([], [], color=BELIEVES_COLOR, marker="o", linestyle="none", label="Believes the claim"),
+]
 
-
-# The live Matplotlib component follows the course's Basic Network notebook and
-# CustomSpaceVisualization in the symbiotic-relationships-simulation server.py.
 @solara.component
 def NetworkView(model):
     revision = update_counter.get()
-    figure = Figure(figsize=(6, 5), layout="constrained")
+    figure = Figure(figsize=(8, 7), layout="constrained")
     axes = figure.subplots()
-    nx.draw_networkx_edges(model.graph, POSITIONS, ax=axes, edge_color="0.72", alpha=0.5)
-    believers = [node for node, agent in model.agents_by_node.items() if agent.believes]
-    rejecters = [node for node, agent in model.agents_by_node.items() if not agent.believes]
-    nx.draw_networkx_nodes(
-        model.graph,
-        POSITIONS,
-        nodelist=rejecters,
-        node_color="tab:blue",
-        node_size=28,
-        label="Rejects the claim",
-        ax=axes,
+    nx.draw_networkx_edges(
+        model.graph, POSITIONS, ax=axes, edge_color="#64748b", width=0.55, alpha=0.25
     )
     nx.draw_networkx_nodes(
         model.graph,
         POSITIONS,
-        nodelist=believers,
-        node_color="tab:red",
-        node_size=28,
-        label="Believes the claim",
+        nodelist=list(model.agents_by_node),
+        node_color=[
+            BELIEVES_COLOR if agent.believes else REJECTS_COLOR
+            for agent in model.agents_by_node.values()
+        ],
+        node_size=32,
+        edgecolors="white",
+        linewidths=0.45,
         ax=axes,
     )
+    if ISOLATED_NODES:
+        label = "Isolated node" if len(ISOLATED_NODES) == 1 else "Isolated nodes"
+        axes.annotate(
+            label,
+            (0, -1.15),
+            xytext=(0, -8),
+            textcoords="offset points",
+            ha="center",
+            va="top",
+            fontsize=9,
+        )
+    axes.margins(0.08)
     axes.set_axis_off()
     axes.set_aspect("equal")
-    axes.legend(loc="upper right")
+    figure.legend(
+        handles=BELIEF_LEGEND,
+        loc="outside upper center",
+        ncols=2,
+        frameon=False,
+    )
     solara.FigureMatplotlib(figure, dependencies=[model, revision])
 
 
@@ -83,7 +107,7 @@ model_params = {
 
 @solara.component
 def Page():
-    model = solara.use_memo(
+    initial_model = solara.use_memo(
         lambda: NetworkModel(
             GRAPH,
             initial_believers=INITIAL_BELIEVERS,
@@ -93,10 +117,16 @@ def Page():
         ),
         [],
     )
-    return SolaraViz(
-        model,
-        components=[(NetworkView, 0), (PrevalenceView, 0)],
-        model_params=model_params,
-        name="Fact-checking dynamics",
-        play_interval=350,
-    )
+    model = solara.use_reactive(initial_model)
+    with solara.Column():
+        SolaraViz(
+            model,
+            model_params=model_params,
+            name="Fact-checking dynamics",
+            play_interval=350,
+        )
+        solara.ColumnsResponsive(
+            default=12,
+            large=[8, 4],
+            children=[NetworkView(model.value), PrevalenceView(model.value)],
+        )
