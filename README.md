@@ -37,3 +37,23 @@ random draws used by the model. To replay one run from Python, pass its
   `threshold_reached` is false.
 - `trajectories.csv` records prevalence at steps 0 through 100 and joins to
   `runs.csv` by `run_seed`.
+
+## Summarize a batch in R
+
+Generate the batch as shown above, then open `analysis.Rmd` in RStudio.
+Run the chunks in order to inspect the CSVs, calculate the summaries, and draw
+the prevalence plot with `ggplot2`.
+
+```r
+install.packages("ggplot2")
+```
+
+Run the install command once if needed. Edit `results_dir` in the first chunk
+to use a different batch. Run the export chunk to save both outputs in that
+directory.
+
+- `prevalence-by-condition.pdf` shows each run and the condition mean, with
+  shared axes and a vertical line at each condition's fact-check step.
+- `condition-summary.csv` reports the mean and standard deviation of peak and
+  final prevalence, along with counts of runs that reached or never reached
+  the persistence threshold. Standard deviations are blank for a one-run pilot.

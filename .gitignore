@@ -231,6 +231,7 @@ __marimo__/
 .solara/
 
 # Simulation run output (mesa DataCollector exports, batdata stores, matplotlib figures)
+/results/
 runs/
 outputs/
 *.parquet

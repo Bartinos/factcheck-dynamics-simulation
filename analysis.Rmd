@@ -1,0 +1,162 @@
+---
+title: "Fact-checking simulation analysis"
+output: html_notebook
+---
+
+## Load the batch files
+
+Set `results_dir` to the folder containing the two CSVs from `batch_run.py`.
+
+```{r load-data}
+results_dir <- "results"
+runs_file <- file.path(results_dir, "runs.csv")
+trajectories_file <- file.path(results_dir, "trajectories.csv")
+
+if (!file.exists(runs_file) || !file.exists(trajectories_file)) {
+  stop("Generate the batch CSVs with batch_run.py before running this chunk.")
+}
+
+runs <- read.csv(
+  runs_file,
+  colClasses = c(run_seed = "character", threshold_reached = "character")
+)
+trajectories <- read.csv(trajectories_file, colClasses = c(run_seed = "character"))
+
+head(runs)
+head(trajectories)
+```
+
+## Prepare the data
+
+```{r prepare-data}
+if (anyDuplicated(runs$run_seed) ||
+    !setequal(runs$run_seed, trajectories$run_seed)) {
+  stop("The CSVs must describe the same runs, with one summary per run.")
+}
+
+step_count <- unique(runs$steps)
+threshold <- unique(runs$threshold)
+if (length(step_count) != 1L || length(threshold) != 1L) {
+  stop("Expected one observation window and one threshold.")
+}
+
+steps <- seq.int(0L, step_count)
+steps_by_run <- split(trajectories$step, trajectories$run_seed)
+complete_runs <- vapply(
+  steps_by_run,
+  function(run_steps) identical(sort(run_steps, na.last = TRUE), steps),
+  logical(1)
+)
+if (!all(complete_runs) || anyNA(trajectories$prevalence)) {
+  stop("Each run must have one prevalence value per step.")
+}
+
+threshold_status <- tolower(runs$threshold_reached)
+if (any(!threshold_status %in% c("true", "false"))) {
+  stop("threshold_reached must be true or false for every run.")
+}
+runs$threshold_reached <- threshold_status == "true"
+
+fact_check_steps <- sort(unique(runs$fact_check_step))
+peer_influence_levels <- sort(unique(runs$peer_influence))
+if (length(fact_check_steps) != 2L || length(peer_influence_levels) != 2L ||
+    any(table(runs$fact_check_step, runs$peer_influence) == 0)) {
+  stop("Expected runs in all four combinations of timing and peer influence.")
+}
+
+runs$timing <- factor(
+  runs$fact_check_step,
+  levels = fact_check_steps,
+  labels = paste("Fact-check at step", fact_check_steps)
+)
+runs$influence <- factor(
+  runs$peer_influence,
+  levels = peer_influence_levels,
+  labels = sprintf("Peer influence %.2f", peer_influence_levels)
+)
+plot_data <- merge(
+  trajectories, runs[c("run_seed", "timing", "influence")], by = "run_seed"
+)
+mean_trajectory <- aggregate(
+  prevalence ~ step + timing + influence, data = plot_data, FUN = mean
+)
+fact_checks <- unique(runs[c("timing", "fact_check_step")])
+```
+
+## Summarize the conditions
+
+```{r summarize-conditions}
+conditions <- split(runs, list(runs$influence, runs$timing))
+condition_summary <- do.call(rbind, lapply(conditions, function(group) {
+  data.frame(
+    fact_check_step = group$fact_check_step[1],
+    peer_influence = group$peer_influence[1],
+    runs = nrow(group),
+    peak_prevalence_mean = mean(group$peak_prevalence),
+    peak_prevalence_sd = sd(group$peak_prevalence),
+    final_prevalence_mean = mean(group$final_prevalence),
+    final_prevalence_sd = sd(group$final_prevalence),
+    threshold = threshold,
+    threshold_reached = sum(group$threshold_reached),
+    threshold_not_reached = sum(!group$threshold_reached)
+  )
+}))
+rownames(condition_summary) <- NULL
+condition_summary
+```
+
+## Plot the prevalence trajectories
+
+```{r plot-trajectories, fig.width=10, fig.height=7}
+library(ggplot2)
+
+prevalence_plot <- ggplot() +
+  geom_line(
+    data = plot_data,
+    aes(step, prevalence, group = run_seed, color = "Individual run"),
+    alpha = 0.35, linewidth = 0.35
+  ) +
+  geom_vline(
+    data = fact_checks,
+    aes(xintercept = fact_check_step, color = "Fact-check step"),
+    linetype = "dashed"
+  ) +
+  geom_line(
+    data = mean_trajectory,
+    aes(step, prevalence, color = "Mean prevalence"),
+    linewidth = 0.9
+  ) +
+  facet_grid(timing ~ influence) +
+  scale_x_continuous(limits = c(0, step_count)) +
+  scale_y_continuous(
+    limits = c(0, 1),
+    breaks = seq(0, 1, by = 0.25),
+    labels = function(values) paste0(100 * values, "%")
+  ) +
+  scale_color_manual(
+    values = c(
+      "Individual run" = "#8495A3",
+      "Mean prevalence" = "#15548B",
+      "Fact-check step" = "#AE501A"
+    ),
+    breaks = c("Individual run", "Mean prevalence", "Fact-check step")
+  ) +
+  labs(x = "Time step", y = "Agents who believe the claim", color = NULL) +
+  theme_minimal(base_size = 12) +
+  theme(legend.position = "bottom", panel.grid.minor = element_blank())
+
+prevalence_plot
+```
+
+## Export the figure and table
+
+```{r export-results, eval=FALSE}
+ggsave(
+  file.path(results_dir, "prevalence-by-condition.pdf"),
+  prevalence_plot, width = 10, height = 7
+)
+write.csv(
+  condition_summary, file.path(results_dir, "condition-summary.csv"),
+  row.names = FALSE, na = ""
+)
+```
